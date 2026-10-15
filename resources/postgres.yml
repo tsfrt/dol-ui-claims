@@ -1,0 +1,6 @@
+resources:
+  postgres_projects:
+    dol_ui:
+      project_id: ${var.postgres_project_id}
+      display_name: DOL UI Claims
+      pg_version: 17

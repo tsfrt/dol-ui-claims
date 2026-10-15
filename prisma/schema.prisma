@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AppConfig {
+  key       String   @id
+  value     String
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("app_config")
+}
+
+model ScoringThreshold {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  mlCutoff     Float    @map("ml_cutoff")
+  severityHigh Float    @map("severity_high")
+  severityMed  Float    @map("severity_med")
+  version      Int      @default(1)
+  active       Boolean  @default(true)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("scoring_thresholds")
+}
+
+model RuleToggle {
+  ruleId    String   @id @map("rule_id")
+  enabled   Boolean  @default(true)
+  label     String
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("rule_toggles")
+}
+
+model CustomRule {
+  ruleId       String    @id @map("rule_id")
+  name         String
+  prompt       String
+  rationale    String    @default("")
+  category     String
+  severity     String
+  sqlText      String    @map("sql_text")
+  status       String    @default("draft")
+  backtestJson String?   @map("backtest_json")
+  authorModel  String?   @map("author_model")
+  createdBy    String    @map("created_by")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  validatedAt  DateTime? @map("validated_at")
+  promotedBy   String?   @map("promoted_by")
+  promotedAt   DateTime? @map("promoted_at")
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("custom_rules")
+}
+
+model StatePriority {
+  stateCode        String   @id @map("state_code")
+  sortWeight       Int      @default(100) @map("sort_weight")
+  inDefaultQueue   Boolean  @default(true) @map("in_default_queue")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("state_priority")
+}
+
+model Case {
+  applicantKey   String                 @id @map("applicant_key")
+  status         String                 @default("new")
+  assignedTo     String?                @map("assigned_to")
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @default(now()) @updatedAt @map("updated_at")
+  notes          CaseNote[]
+  dispositions   AnalystDisposition[]
+  investigations InvestigationRun[]
+
+  @@map("cases")
+}
+
+model CaseNote {
+  id           String   @id @default(cuid())
+  applicantKey String   @map("applicant_key")
+  author       String
+  body         String
+  createdAt    DateTime @default(now()) @map("created_at")
+  case         Case     @relation(fields: [applicantKey], references: [applicantKey], onDelete: Cascade)
+
+  @@index([applicantKey])
+  @@map("case_notes")
+}
+
+model AnalystDisposition {
+  id           String   @id @default(cuid())
+  applicantKey String   @map("applicant_key")
+  source       String
+  decision     String
+  rationale    String
+  author       String
+  createdAt    DateTime @default(now()) @map("created_at")
+  case         Case     @relation(fields: [applicantKey], references: [applicantKey], onDelete: Cascade)
+
+  @@index([applicantKey])
+  @@map("analyst_dispositions")
+}
+
+model InvestigationRun {
+  id             String   @id @default(cuid())
+  applicantKey   String   @map("applicant_key")
+  conversationId String?  @map("conversation_id")
+  prompt         String
+  report         String   @default("")
+  status         String   @default("queued")
+  verdict        String?
+  confidence     String?
+  summary        String?
+  stepsJson      String?  @map("steps_json")
+  sqlCount       Int?     @map("sql_count")
+  requestedBy    String?  @map("requested_by")
+  error          String?
+  completedAt    DateTime? @map("completed_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  case           Case     @relation(fields: [applicantKey], references: [applicantKey], onDelete: Cascade)
+
+  @@index([applicantKey])
+  @@map("investigation_runs")
+}
+
+model WatchlistAdd {
+  id        String   @id @default(cuid())
+  ssnHash   String   @map("ssn_hash")
+  label     String
+  author    String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("watchlist_adds")
+}

@@ -1,0 +1,35 @@
+command:
+  - python
+  - -m
+  - uvicorn
+  - app:app
+  - --host
+  - 0.0.0.0
+  - --port
+  - "8000"
+
+env:
+  - name: UC_CATALOG
+    value: lanl
+  - name: UC_SCHEMA
+    value: dol_ui
+  - name: DATABRICKS_WAREHOUSE_ID
+    valueFrom: sql-warehouse
+  - name: ENDPOINT_NAME
+    value: projects/dol-ui/branches/production/endpoints/primary
+  - name: GENIE_AGENT_ID
+    value: 01f1c82fe86712eba67f29f01e08dc04
+  - name: PERSONA_FEDERAL_ANALYST
+    valueFrom: persona-federal-analyst
+  - name: PERSONA_CA_ANALYST
+    valueFrom: persona-ca-analyst
+  - name: RULE_AUTHOR_ENDPOINT
+    valueFrom: rule-author-llm
+  - name: ORCHESTRATE_JOB_ID
+    valueFrom: orchestrate-job
+  - name: STREAM_JOB_ID
+    valueFrom: stream-job
+  - name: GITHUB_REPO_URL
+    value: https://github.com/tsfrt/dol-ui-claims
+  - name: ACCESS_ADMINS
+    value: thomas.seufert@databricks.com

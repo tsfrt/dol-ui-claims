@@ -1,0 +1,62 @@
+name: Preview app
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    env:
+      DATABRICKS_AUTH_TYPE: github-oidc
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      SLUG: pr-${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm ci && npm run build
+
+      - name: Lakebase feature branch from production
+        run: bash scripts/ci_lakebase.sh "$SLUG" --create
+
+      - name: Apply Prisma migrations to the feature branch
+        run: npx --yes prisma@6.4.1 migrate deploy
+
+      - name: Point the preview app at its Lakebase branch
+        run: sed -i "s#projects/dol-ui/branches/production/endpoints/primary#${ENDPOINT_NAME}#" app.yaml
+
+      - name: Deploy preview bundle
+        run: |
+          VARS="--var lakebase_branch=$SLUG --var app_name=dol-ui-claims-$SLUG"
+          databricks bundle validate --target dev $VARS
+          databricks bundle deploy --target dev $VARS
+          databricks bundle run dol_ui_app --target dev $VARS
+
+      - name: Comment preview URL
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { execSync } = require("child_process");
+            const app = JSON.parse(execSync(`databricks apps get dol-ui-claims-${process.env.SLUG} -o json`).toString());
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: context.issue.number,
+              body: `Preview app: ${app.url}\nLakebase branch: \`${process.env.ENDPOINT_NAME}\``,
+            });

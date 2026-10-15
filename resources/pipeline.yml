@@ -1,0 +1,24 @@
+resources:
+  pipelines:
+    dol_ui_etl:
+      name: "[${bundle.target}] DOL UI claims SDP"
+      serverless: true
+      catalog: ${var.catalog}
+      schema: ${var.schema}
+      continuous: false
+      photon: true
+      channel: CURRENT
+      libraries:
+        - glob:
+            include: ../src/pipelines/**
+      configuration:
+        catalog: ${var.catalog}
+        schema: ${var.schema}
+        share_catalog_oh: ${var.share_catalog_oh}
+        share_catalog_co: ${var.share_catalog_co}
+        share_catalog_nc: ${var.share_catalog_nc}
+      permissions:
+        - level: CAN_RUN
+          group_name: users
+        - level: CAN_VIEW
+          service_principal_name: ${var.app_principal}

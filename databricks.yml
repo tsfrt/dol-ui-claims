@@ -1,0 +1,86 @@
+bundle:
+  name: dol-ui-claims
+
+sync:
+  include:
+    - frontend/dist/**
+  exclude:
+    - .git/**
+    - frontend/node_modules/**
+    - .venv/**
+    - __pycache__/**
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity Catalog for DOL UI demo tables
+    default: lanl
+  schema:
+    description: Schema for claims, intel, and gold products
+    default: dol_ui
+  warehouse_id:
+    description: SQL warehouse used by the analyst app and Genie
+    default: "688f49c732cf9083"
+  postgres_project_id:
+    description: Lakebase autoscaling project id
+    default: dol-ui
+  lakebase_branch:
+    description: Lakebase branch bound to the app
+    default: production
+  app_name:
+    description: Databricks App name
+    default: dol-ui-claims
+  zerobus_endpoint:
+    description: Regional Zerobus Ingest endpoint for the workspace
+    default: https://7474656503943141.zerobus.us-east-1.cloud.databricks.com
+  zerobus_principal:
+    description: Application ID of the Zerobus producer service principal
+    default: 1a16d6e9-8cf6-4ae3-aa56-26ddd8b27fd8
+  secret_scope:
+    description: Secret scope holding the Zerobus producer OAuth credentials
+    default: dol_ui
+  genie_space_id:
+    description: Genie agent used for Agent mode case reviews (created by scripts/setup_genie.py)
+    default: 01f1c82fe86712eba67f29f01e08dc04
+  app_principal:
+    description: Application ID of the app service principal (PII-cleared federal investigator)
+    default: 472dc3a6-18d1-4b80-88cf-57d27f66b3d1
+  persona_federal_principal:
+    description: Application ID of the federal analyst persona (all states, no PII clearance)
+    default: 743cd53d-60cd-42cf-8ab8-6d32d72ea1f3
+  rule_author_endpoint:
+    description: Foundation Model endpoint that drafts rules from natural language in the Rule studio
+    default: databricks-claude-sonnet-5-5
+  persona_ca_principal:
+    description: Application ID of the CA EDD state analyst persona (CA only, no PII clearance)
+    default: bc533198-576c-4635-ad84-b79a409e96c8
+  share_catalog_oh:
+    description: Catalog mounted from Ohio's Delta Share; empty reads the staged stand-in table
+    default: ""
+  share_catalog_co:
+    description: Catalog mounted from Colorado's Delta Share; empty reads the staged stand-in table
+    default: ""
+  share_catalog_nc:
+    description: Catalog mounted from North Carolina's Delta Share; empty reads the staged stand-in table
+    default: ""
+
+targets:
+  dev:
+    default: true
+    mode: development
+    workspace:
+      host: https://fevm-serverless-stable-blj52t.cloud.databricks.com
+      profile: fevm-serverless-stable-blj52t
+      root_path: ~/.bundle/${bundle.name}/${bundle.target}
+
+  prod:
+    mode: production
+    workspace:
+      host: https://fevm-serverless-stable-blj52t.cloud.databricks.com
+      profile: fevm-serverless-stable-blj52t
+      root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      lakebase_branch: production
+      app_name: dol-ui-claims

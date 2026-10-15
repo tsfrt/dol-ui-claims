@@ -1,0 +1,208 @@
+x-push-params: &push_params
+  - "--catalog"
+  - "{{job.parameters.catalog}}"
+  - "--schema"
+  - "{{job.parameters.schema}}"
+  - "--secret_scope"
+  - ${var.secret_scope}
+  - "--zerobus_endpoint"
+  - ${var.zerobus_endpoint}
+  - "--max_events"
+  - "{{job.parameters.max_events}}"
+
+x-file-params: &file_params
+  - "--catalog"
+  - "{{job.parameters.catalog}}"
+  - "--schema"
+  - "{{job.parameters.schema}}"
+  - "--specs_path"
+  - ${workspace.file_path}/src/pipelines
+  - "--hold_back"
+  - "{{job.parameters.hold_back_files}}"
+
+x-governance: &governance_task
+  task_key: apply_governance
+  notebook_task:
+    notebook_path: ../src/jobs/governance.py
+    source: WORKSPACE
+    base_parameters:
+      catalog: "{{job.parameters.catalog}}"
+      schema: "{{job.parameters.schema}}"
+      app_principal: ${var.app_principal}
+      persona_federal_principal: ${var.persona_federal_principal}
+      persona_ca_principal: ${var.persona_ca_principal}
+      bundle_files_path: ${workspace.file_path}
+
+x-custom-rules: &custom_rules_task
+  task_key: apply_custom_rules
+  depends_on:
+    - task_key: apply_governance
+  environment_key: lakebase_client
+  spark_python_task:
+    python_file: ../src/jobs/apply_custom_rules.py
+    parameters: ["--catalog", "{{job.parameters.catalog}}", "--schema", "{{job.parameters.schema}}", "--lakebase_endpoint", "projects/${var.postgres_project_id}/branches/${var.lakebase_branch}/endpoints/primary"]
+
+x-env: &serverless_env
+  - environment_key: serverless_default
+    spec:
+      environment_version: "3"
+      dependencies:
+        - faker
+        - scikit-learn
+        - mlflow>=3.1
+        - requests
+  - environment_key: lakebase_client
+    spec:
+      environment_version: "3"
+      dependencies:
+        - psycopg[binary]
+        - databricks-sdk>=0.81.0
+
+resources:
+  jobs:
+    dol_ui_orchestrate:
+      name: "[${bundle.target}] DOL UI - rebuild demo (seed, stream, SDP, score, agent review)"
+      description: Regenerates the synthetic population, streams every state outbox through Zerobus, drops Michigan batch files, commits the Delta Sharing states' status logs, fully refreshes the pipeline, retrains the model, and runs Genie Agent mode reviews.
+      max_concurrent_runs: 1
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: n_applicants
+          default: "4000"
+        - name: max_events
+          default: "0"
+        - name: hold_back_files
+          default: "1"
+        - name: genie_space_id
+          default: ${var.genie_space_id}
+      environments: *serverless_env
+      tasks:
+        - task_key: seed_population_and_intel
+          notebook_task:
+            notebook_path: ../src/jobs/seed_intel.py
+            source: WORKSPACE
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              schema: "{{job.parameters.schema}}"
+              n_applicants: "{{job.parameters.n_applicants}}"
+              zerobus_principal: ${var.zerobus_principal}
+              reset_landing: "true"
+
+        - task_key: stream_state_claims_zerobus
+          depends_on:
+            - task_key: seed_population_and_intel
+          environment_key: serverless_default
+          spark_python_task:
+            python_file: ../src/jobs/push_claims.py
+            parameters: *push_params
+
+        - task_key: deliver_state_batch_files
+          depends_on:
+            - task_key: seed_population_and_intel
+          environment_key: serverless_default
+          spark_python_task:
+            python_file: ../src/jobs/deliver_state_files.py
+            parameters: *file_params
+
+        - task_key: commit_state_share_updates
+          depends_on:
+            - task_key: seed_population_and_intel
+          environment_key: serverless_default
+          spark_python_task:
+            python_file: ../src/jobs/deliver_state_shares.py
+            parameters: *file_params
+
+        - task_key: normalize_and_check_sdp
+          depends_on:
+            - task_key: stream_state_claims_zerobus
+            - task_key: deliver_state_batch_files
+            - task_key: commit_state_share_updates
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.dol_ui_etl.id}
+            full_refresh: true
+
+        - <<: *governance_task
+          depends_on:
+            - task_key: normalize_and_check_sdp
+
+        - *custom_rules_task
+
+        - task_key: train_eval_fraud_model
+          depends_on:
+            - task_key: normalize_and_check_sdp
+          environment_key: serverless_default
+          spark_python_task:
+            python_file: ../src/jobs/train_eval.py
+            parameters: ["--catalog", "{{job.parameters.catalog}}", "--schema", "{{job.parameters.schema}}"]
+
+        - task_key: genie_agent_review
+          depends_on:
+            - task_key: train_eval_fraud_model
+          notebook_task:
+            notebook_path: ../src/jobs/genie_review.py
+            source: WORKSPACE
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              schema: "{{job.parameters.schema}}"
+              genie_space_id: "{{job.parameters.genie_space_id}}"
+              max_cases: "8"
+
+    dol_ui_stream_and_score:
+      name: "[${bundle.target}] DOL UI - stream new state events and rescore"
+      description: Streams any events still waiting in the state outboxes through Zerobus, delivers any held-back Michigan batch files for Auto Loader, commits held-back status changes in the Delta Sharing states, runs the pipeline incrementally, and rescores.
+      max_concurrent_runs: 1
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: max_events
+          default: "0"
+        - name: hold_back_files
+          default: "0"
+        - name: genie_space_id
+          default: ${var.genie_space_id}
+      environments: *serverless_env
+      tasks:
+        - task_key: stream_state_claims_zerobus
+          environment_key: serverless_default
+          spark_python_task:
+            python_file: ../src/jobs/push_claims.py
+            parameters: *push_params
+
+        - task_key: deliver_state_batch_files
+          environment_key: serverless_default
+          spark_python_task:
+            python_file: ../src/jobs/deliver_state_files.py
+            parameters: *file_params
+
+        - task_key: commit_state_share_updates
+          environment_key: serverless_default
+          spark_python_task:
+            python_file: ../src/jobs/deliver_state_shares.py
+            parameters: *file_params
+
+        - task_key: normalize_and_check_sdp
+          depends_on:
+            - task_key: stream_state_claims_zerobus
+            - task_key: deliver_state_batch_files
+            - task_key: commit_state_share_updates
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.dol_ui_etl.id}
+            full_refresh: false
+
+        - <<: *governance_task
+          depends_on:
+            - task_key: normalize_and_check_sdp
+
+        - *custom_rules_task
+
+        - task_key: train_eval_fraud_model
+          depends_on:
+            - task_key: normalize_and_check_sdp
+          environment_key: serverless_default
+          spark_python_task:
+            python_file: ../src/jobs/train_eval.py
+            parameters: ["--catalog", "{{job.parameters.catalog}}", "--schema", "{{job.parameters.schema}}"]

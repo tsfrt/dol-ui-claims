@@ -1,0 +1,26 @@
+name: Preview cleanup
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    env:
+      DATABRICKS_AUTH_TYPE: github-oidc
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      SLUG: pr-${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - name: Destroy preview bundle
+        run: databricks bundle destroy --target dev --auto-approve --var lakebase_branch=$SLUG --var app_name=dol-ui-claims-$SLUG || true
+      - name: Delete Lakebase feature branch
+        run: databricks postgres delete-branch projects/dol-ui/branches/$SLUG || true

@@ -1,0 +1,43 @@
+resources:
+  apps:
+    dol_ui_app:
+      name: ${var.app_name}
+      description: DOL unemployment claims analyst workbench (synthetic demo)
+      source_code_path: ../
+      resources:
+        - name: lakebase-db
+          postgres:
+            branch: projects/${var.postgres_project_id}/branches/${var.lakebase_branch}
+            database: projects/${var.postgres_project_id}/branches/${var.lakebase_branch}/databases/databricks-postgres
+            permission: CAN_CONNECT_AND_CREATE
+        - name: sql-warehouse
+          sql_warehouse:
+            id: ${var.warehouse_id}
+            permission: CAN_USE
+        - name: genie-agent
+          genie_space:
+            name: DOL UI Claims Integrity Investigator
+            space_id: ${var.genie_space_id}
+            permission: CAN_RUN
+        - name: persona-federal-analyst
+          secret:
+            scope: ${var.secret_scope}
+            key: persona_federal_analyst
+            permission: READ
+        - name: persona-ca-analyst
+          secret:
+            scope: ${var.secret_scope}
+            key: persona_ca_analyst
+            permission: READ
+        - name: rule-author-llm
+          serving_endpoint:
+            name: ${var.rule_author_endpoint}
+            permission: CAN_QUERY
+        - name: orchestrate-job
+          job:
+            id: ${resources.jobs.dol_ui_orchestrate.id}
+            permission: CAN_VIEW
+        - name: stream-job
+          job:
+            id: ${resources.jobs.dol_ui_stream_and_score.id}
+            permission: CAN_MANAGE_RUN

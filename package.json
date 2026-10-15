@@ -1,0 +1,8 @@
+{
+  "name": "dol-ui-claims-root",
+  "private": true,
+  "scripts": {
+    "prisma:migrate": "npx --yes prisma@6.4.1 migrate deploy",
+    "frontend:build": "npm --prefix frontend ci && npm --prefix frontend run build"
+  }
+}
