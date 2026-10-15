@@ -41,11 +41,18 @@ function Node({ title, sub, value, unit, href, onClick, color, children, status 
   );
 }
 
-function Lane({ label, color, children }) {
+function Lane({ label, color, href, action, children }) {
   return (
     <div className="arch-lane">
-      <div className="arch-lane-label" style={{ color }}>{label}</div>
-      <div className="arch-lane-body">{children}</div>
+      {href ? (
+        <a className="arch-lane-label link" style={{ color }} {...ext(href)}>{label} ↗</a>
+      ) : (
+        <div className="arch-lane-label" style={{ color }}>{label}</div>
+      )}
+      <div className="arch-lane-body">
+        {action}
+        {children}
+      </div>
     </div>
   );
 }
@@ -147,8 +154,16 @@ export default function Architecture() {
               sub={<>Streams each share's change feed ({num(s.share_versions)} table versions so far); nothing to run on the state side, and each state can revoke access{staged && <> · <b>staged:</b> reading stand-in tables in this metastore until the shares are mounted</>}</>} />
           </Lane>
           <Flow />
-          <Lane label="Lakeflow Spark Declarative Pipeline" color={C.sdp}>
-            <Node title="Bronze event stream" color={C.sdp} value={num(s.bronze_rows)} unit="rows" href={L.bronze} sub="Three kinds of append flow (push, file pull, share change feed) into one streaming table" status={<PipelineState p={data.pipeline} />} />
+          <Lane label="Lakeflow Spark Declarative Pipeline" color={C.sdp} href={data.pipeline?.url}
+            action={data.pipeline?.url && (
+              <a className="arch-pipeline" {...ext(data.pipeline.url)}>
+                <span>Open pipeline</span>
+                <PipelineState p={data.pipeline} />
+                {data.pipeline.last_update?.at && <span className="dim">{ago(data.pipeline.last_update.at)}</span>}
+                <span className="arch-open">↗</span>
+              </a>
+            )}>
+            <Node title="Bronze event stream" color={C.sdp} value={num(s.bronze_rows)} unit="rows" href={L.bronze} sub="Three kinds of append flow (push, file pull, share change feed) into one streaming table" />
             <Node title="Silver canonical events" color={C.sdp} value={num(s.events)} unit="events" href={L.silver} sub={`${s.states} state contracts parsed into one model · data quality expectations drop malformed records`} />
             <Node title="Claim history · Auto CDC" color={C.sdp} value={num(s.history_rows)} unit="SCD2 rows" sub="Out-of-order status events resolved into a full claim timeline" />
             <Node title="Gold analytical products" color={C.sdp} value={num(s.claimants)} unit="claimants" href={L.gold} sub={`${num(s.claims)} claims · ${num(s.claim_weeks)} benefit weeks · cross-state identity resolution`} />
